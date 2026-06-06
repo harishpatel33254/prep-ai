@@ -67,7 +67,7 @@ link to acces the working site --- https://harishpatel33254.github.io/prep-ai/
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + Vite |
-| AI Engine | Anthropic Claude API (`claude-sonnet-4-20250514`) |
+| AI Engine | Groq API (`GROQ-sonnet-4-20250514`) |
 | Styling | Custom CSS-in-JS (no external UI library) |
 | Fonts | DM Sans, Syne, DM Mono (Google Fonts) |
 | Storage | localStorage (session history) |

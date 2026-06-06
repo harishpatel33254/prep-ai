@@ -60,19 +60,7 @@ link to acces the working site --- https://harishpatel33254.github.io/prep-ai/
 
 ---
 
-## 📸 Screenshots
 
-> *(Add screenshots of each tool here after deployment)*
-
-| Home | Interview Practice | Resume Analyzer |
-|------|-------------------|-----------------|
-| ![home](screenshots/home.png) | ![interview](screenshots/interview.png) | ![resume](screenshots/resume.png) |
-
-| Skill Gap Planner | Job Trust Checker | History |
-|-------------------|------------------|---------|
-| ![skillgap](screenshots/skillgap.png) | ![jobcheck](screenshots/jobcheck.png) | ![history](screenshots/history.png) |
-
----
 
 ## 🛠️ Tech Stack
 

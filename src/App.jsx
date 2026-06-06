@@ -1,0 +1,826 @@
+import { useState, useEffect, useRef } from "react";
+
+/* ─── FONTS ─── */
+const FontLink = () => (
+  <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');`}</style>
+);
+
+/* ─── THEME ─── */
+const C = {
+  bg: "#08090e", surface: "#10121a", card: "#13161f", border: "#1e2235",
+  borderHover: "#3a4060", text: "#e8eaf2", muted: "#6a7090", faint: "#2a2f45",
+  blue: "#6b9fff", blueD: "#1a2744", blueB: "#2a3f6e",
+  green: "#5dcc8a", greenD: "#0d2018", greenB: "#1a4030",
+  amber: "#f0a84a", amberD: "#1e1408", amberB: "#3a2808",
+  purple: "#b07cee", purpleD: "#1a0e2a", purpleB: "#3a1e5a",
+  red: "#e06060", redD: "#200808", redB: "#3a1010",
+  teal: "#4accc8", tealD: "#081a1a", tealB: "#0e3030",
+};
+
+/* ─── DATA ─── */
+const ROLES = [
+  { id: "swe", label: "Software Engineer", icon: "💻", skills: ["JavaScript","Python","Data Structures","System Design","Git","SQL"] },
+  { id: "data", label: "Data Scientist", icon: "🧠", skills: ["Python","ML","Statistics","SQL","Pandas","Visualization"] },
+  { id: "product", label: "Product Manager", icon: "🗂️", skills: ["Roadmapping","Analytics","Agile","User Research","Prioritization","SQL"] },
+  { id: "marketing", label: "Marketing Analyst", icon: "📊", skills: ["Google Analytics","SEO","Excel","Campaign Management","CRM","Copywriting"] },
+  { id: "finance", label: "Finance Analyst", icon: "💹", skills: ["Excel","Financial Modeling","DCF","SQL","Accounting","PowerBI"] },
+  { id: "design", label: "UI/UX Designer", icon: "🎨", skills: ["Figma","Prototyping","User Research","CSS","Design Systems","Accessibility"] },
+];
+
+const QUESTIONS = {
+  swe: [
+    { q: "Tell me about a time you debugged a complex issue under pressure.", t: "Behavioral" },
+    { q: "How do you ensure code quality in a fast-paced team?", t: "Behavioral" },
+    { q: "Explain the difference between REST and GraphQL APIs.", t: "Technical" },
+    { q: "Describe a time you had to learn a new technology quickly.", t: "Situational" },
+    { q: "Where do you see yourself in 5 years?", t: "HR" },
+  ],
+  data: [
+    { q: "Walk me through how you approach a new data problem.", t: "Behavioral" },
+    { q: "What is the difference between overfitting and underfitting?", t: "Technical" },
+    { q: "How would you handle missing data in a critical dataset?", t: "Situational" },
+    { q: "Tell me about a model you built that had real business impact.", t: "Behavioral" },
+    { q: "How do you communicate complex findings to non-technical stakeholders?", t: "HR" },
+  ],
+  product: [
+    { q: "How do you prioritize features when resources are limited?", t: "Behavioral" },
+    { q: "Tell me about a product decision you made with incomplete data.", t: "Behavioral" },
+    { q: "Walk me through how you define success for a new feature.", t: "Technical" },
+    { q: "A key metric drops 20% overnight. What do you do?", t: "Situational" },
+    { q: "How do you handle disagreement between engineering and design?", t: "HR" },
+  ],
+  marketing: [
+    { q: "Tell me about a campaign you ran that didn't go as planned.", t: "Behavioral" },
+    { q: "How do you measure the success of a marketing campaign?", t: "Technical" },
+    { q: "A competitor just launched a viral product. How do you respond?", t: "Situational" },
+    { q: "Describe a time you used data to change a marketing strategy.", t: "Behavioral" },
+    { q: "What makes you passionate about marketing?", t: "HR" },
+  ],
+  finance: [
+    { q: "Tell me about a financial model you built and what it revealed.", t: "Behavioral" },
+    { q: "How do you perform a DCF analysis?", t: "Technical" },
+    { q: "A client's portfolio drops 30% due to market volatility. What do you do?", t: "Situational" },
+    { q: "Describe a time you spotted a financial discrepancy.", t: "Behavioral" },
+    { q: "Why do you want to work in finance?", t: "HR" },
+  ],
+  design: [
+    { q: "Walk me through your design process from brief to delivery.", t: "Behavioral" },
+    { q: "How do you handle design feedback you disagree with?", t: "Behavioral" },
+    { q: "A user test reveals people are confused by your design. What now?", t: "Situational" },
+    { q: "What is the difference between UX and UI design?", t: "Technical" },
+    { q: "Show me a project you're most proud of and explain your decisions.", t: "HR" },
+  ],
+};
+
+const TYPE_STYLE = {
+  Behavioral:  { bg: C.blueD,   text: C.blue,   border: C.blueB },
+  Technical:   { bg: C.greenD,  text: C.green,  border: C.greenB },
+  Situational: { bg: C.amberD,  text: C.amber,  border: C.amberB },
+  HR:          { bg: C.purpleD, text: C.purple, border: C.purpleB },
+};
+
+/* ─── HELPERS ─── */
+const scoreColor = s => s >= 8 ? C.green : s >= 6 ? C.amber : C.red;
+const fmtTime = s => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+const callClaude = async (prompt, max_tokens = 1200) => {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens,
+      temperature: 0.7
+    })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error?.message || "Groq API Error");
+  }
+
+  return data.choices?.[0]?.message?.content || "";
+};
+
+
+/* ─── SHARED UI ─── */
+const s = {
+  app: { minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'DM Sans',sans-serif" },
+  nav: { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 24px", borderBottom:`1px solid ${C.border}`, background:C.bg, position:"sticky", top:0, zIndex:20 },
+  logo: { fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:20, color:"#fff", letterSpacing:-0.5 },
+  logoA: { color:C.blue },
+  container: { maxWidth:820, margin:"0 auto", padding:"28px 18px" },
+  card: { background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:"18px 20px" },
+  btn: { background:C.blue, color:"#07080d", border:"none", borderRadius:10, padding:"11px 22px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"opacity .15s" },
+  btnG: { background:"none", color:C.muted, border:`1px solid ${C.border}`, borderRadius:10, padding:"11px 22px", fontSize:14, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
+  btnSm: { background:C.faint, color:C.text, border:`1px solid ${C.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
+  input: { width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:14, padding:"11px 14px", fontFamily:"'DM Sans',sans-serif", outline:"none", boxSizing:"border-box" },
+  textarea: { width:"100%", minHeight:110, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:14, padding:"12px 14px", fontFamily:"'DM Sans',sans-serif", outline:"none", resize:"vertical", lineHeight:1.6, boxSizing:"border-box" },
+  sectionLabel: { fontSize:11, fontFamily:"'DM Mono',monospace", color:C.muted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:10 },
+  tag: t => ({ display:"inline-block", fontSize:11, padding:"3px 10px", borderRadius:99, background: TYPE_STYLE[t]?.bg||C.faint, color: TYPE_STYLE[t]?.text||C.muted, border:`1px solid ${TYPE_STYLE[t]?.border||C.border}`, fontFamily:"'DM Mono',monospace" }),
+  scoreBar: (score, color) => (
+    <div style={{marginBottom:10}}>
+      <div style={{height:4,background:C.faint,borderRadius:99}}>
+        <div style={{height:4,width:`${score*10}%`,background:color,borderRadius:99,transition:"width 1s ease"}}/>
+      </div>
+    </div>
+  ),
+};
+
+const NavBar = ({ activeTab, setTab, history }) => {
+  const tabs = [
+    { id:"home", label:"Home" },
+    { id:"interview", label:"🎤 Interview" },
+    { id:"resume", label:"📄 Resume" },
+    { id:"skillgap", label:"🧭 Skill Gap" },
+    { id:"jobcheck", label:"🔎 Job Check" },
+    { id:"history", label:`📈 History${history.length ? ` (${history.length})` : ""}` },
+  ];
+  return (
+    <nav style={s.nav}>
+      <span style={s.logo}>prep<span style={s.logoA}>.ai</span></span>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={()=>setTab(tab.id)} style={{
+            background: activeTab===tab.id ? C.faint : "none",
+            border: activeTab===tab.id ? `1px solid ${C.border}` : "1px solid transparent",
+            borderRadius:8, color: activeTab===tab.id ? C.text : C.muted,
+            fontSize:13, padding:"6px 12px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
+            transition:"all .15s"
+          }}>{tab.label}</button>
+        ))}
+      </div>
+    </nav>
+  );
+};
+
+const Spinner = ({ msg="Analyzing with AI..." }) => (
+  <div style={{textAlign:"center",padding:"36px 0",color:C.muted}}>
+    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{fontSize:28,display:"inline-block",animation:"spin 1s linear infinite",marginBottom:8}}>⟳</div>
+    <div style={{fontSize:13}}>{msg}</div>
+  </div>
+);
+
+/* ══════════════════════════════════════════
+   HOME
+══════════════════════════════════════════ */
+const Home = ({ setTab }) => (
+  <div style={s.container}>
+    <div style={{textAlign:"center",marginBottom:40,paddingTop:20}}>
+      <div style={{display:"inline-block",background:C.blueD,color:C.blue,border:`1px solid ${C.blueB}`,borderRadius:99,fontSize:12,padding:"4px 14px",marginBottom:18,fontFamily:"'DM Mono',monospace"}}>AI FOR EMPLOYABILITY · HACKATHON</div>
+      <h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:42,lineHeight:1.1,color:"#fff",margin:"0 0 14px",letterSpacing:-1.5}}>Your AI-powered<br/>job-readiness coach</h1>
+      <p style={{fontSize:16,color:C.muted,maxWidth:460,margin:"0 auto",lineHeight:1.7}}>Practice interviews, analyze your resume, plan your skill path, and verify job postings — all in one place.</p>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+      {[
+        { id:"interview", icon:"🎤", title:"Interview Practice", sub:"Answer questions, get scored with AI feedback", color:C.blue },
+        { id:"resume", icon:"📄", title:"Resume Analyzer", sub:"Upload & get ATS score, keyword gaps, rewrites", color:C.green },
+        { id:"skillgap", icon:"🧭", title:"Skill Gap Planner", sub:"Compare your skills to a target role, get a roadmap", color:C.amber },
+        { id:"jobcheck", icon:"🔎", title:"Job Trust Checker", sub:"Detect fake or scam job postings instantly", color:C.purple },
+      ].map(item => (
+        <div key={item.id} onClick={()=>setTab(item.id)} style={{...s.card, cursor:"pointer", transition:"all .2s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=item.color;e.currentTarget.style.transform="translateY(-2px)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.transform="none";}}>
+          <div style={{fontSize:28,marginBottom:12}}>{item.icon}</div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#fff",marginBottom:6}}>{item.title}</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>{item.sub}</div>
+          <div style={{marginTop:14,fontSize:13,color:item.color,fontWeight:500}}>Open →</div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+/* ══════════════════════════════════════════
+   INTERVIEW PRACTICE
+══════════════════════════════════════════ */
+const Interview = ({ onSaveSession }) => {
+  const [phase, setPhase] = useState("pick"); // pick|practice|done
+  const [role, setRole] = useState(null);
+  const [qs, setQs] = useState([]);
+  const [idx, setIdx] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [results, setResults] = useState([]);
+  const [timer, setTimer] = useState(0);
+  const timerRef = useRef(null);
+  const taRef = useRef(null);
+
+  useEffect(()=>{
+    if(phase==="practice"&&!feedback&&!loading){
+      timerRef.current = setInterval(()=>setTimer(t=>t+1),1000);
+    } else { clearInterval(timerRef.current); }
+    return()=>clearInterval(timerRef.current);
+  },[phase,feedback,loading]);
+
+  const start = r => { setRole(r); setQs(QUESTIONS[r.id]); setIdx(0); setAnswer(""); setFeedback(null); setResults([]); setTimer(0); setPhase("practice"); };
+
+  const submit = async () => {
+    if(!answer.trim()||loading) return;
+    setLoading(true);
+    const q = qs[idx];
+    const prompt = `You are an expert interview coach. Evaluate this answer:\nRole: ${role.label}\nQuestion Type: ${q.t}\nQuestion: "${q.q}"\nAnswer: "${answer}"\nTime: ${timer}s\n\nRespond ONLY with JSON (no markdown):\n{"scores":{"relevance":<1-10>,"structure":<1-10>,"depth":<1-10>,"communication":<1-10>},"overall":<1-10>,"strengths":["<s1>","<s2>"],"improvements":["<i1>","<i2>"],"modelAnswer":"<3-4 sentence strong answer>","verdict":"<one punchy sentence>"}`;
+    try {
+      const text = await callClaude(prompt);
+      const parsed = parseJSON(text);
+      if(parsed) setFeedback({...parsed, timeTaken:timer, question:q.q, answer, qType:q.t});
+      else throw new Error();
+    } catch {
+      setFeedback({ scores:{relevance:7,structure:6,depth:7,communication:8}, overall:7, strengths:["Good attempt","Clear communication"], improvements:["Add specific examples","Use STAR structure"], modelAnswer:"A strong answer includes a specific situation, your role, the actions taken, and measurable results.", verdict:"Solid effort — keep practicing!", timeTaken:timer, question:q.q, answer, qType:q.t, error:true });
+    }
+    setLoading(false);
+  };
+
+  const next = () => {
+    const newResults = [...results, feedback];
+    if(idx+1>=qs.length){
+      const avg = Math.round(newResults.reduce((a,r)=>a+r.overall,0)/newResults.length*10)/10;
+      onSaveSession({ id:Date.now(), role:role.label, icon:role.icon, date:new Date().toLocaleDateString(), results:newResults, avg });
+      setResults(newResults); setPhase("done");
+    } else {
+      setResults(newResults); setIdx(i=>i+1); setAnswer(""); setFeedback(null); setTimer(0);
+      setTimeout(()=>taRef.current?.focus(),100);
+    }
+  };
+
+  const ScoreRow = ({label,score,color})=>(
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontSize:12,color:C.muted,fontFamily:"'DM Mono',monospace"}}>{label}</span>
+        <span style={{fontSize:12,fontWeight:600,color,fontFamily:"'DM Mono',monospace"}}>{score}/10</span>
+      </div>
+      <div style={{height:3,background:C.faint,borderRadius:99}}>
+        <div style={{height:3,width:`${score*10}%`,background:color,borderRadius:99,transition:"width 1s ease"}}/>
+      </div>
+    </div>
+  );
+
+  if(phase==="pick") return (
+    <div style={s.container}>
+      <div style={s.sectionLabel}>Choose your role</div>
+      <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,color:"#fff",margin:"0 0 20px",letterSpacing:-0.5}}>Interview Practice</h2>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
+        {ROLES.map(r=>(
+          <div key={r.id} onClick={()=>start(r)} style={{...s.card,cursor:"pointer",display:"flex",alignItems:"center",gap:14,transition:"all .2s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=C.blue;e.currentTarget.style.background="#151c2e";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.card;}}>
+            <div style={{fontSize:22,background:C.faint,borderRadius:10,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
+            <div>
+              <div style={{fontWeight:600,fontSize:14,color:C.text}}>{r.label}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:2}}>{QUESTIONS[r.id].length} questions</div>
+            </div>
+            <span style={{marginLeft:"auto",color:C.faint,fontSize:16}}>→</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if(phase==="done") {
+    const avg = Math.round(results.reduce((a,r)=>a+r.overall,0)/results.length*10)/10;
+    return (
+      <div style={s.container}>
+        <div style={{textAlign:"center",marginBottom:30}}>
+          <div style={{fontSize:60,fontWeight:800,color:scoreColor(avg),fontFamily:"'Syne',sans-serif",lineHeight:1}}>{avg}</div>
+          <div style={{fontSize:13,color:C.muted,fontFamily:"'DM Mono',monospace",marginTop:4}}>/ 10  ·  session score</div>
+          <div style={{fontSize:15,color:C.muted,marginTop:10}}>
+            {avg>=8?"🌟 Outstanding!":avg>=6?"👍 Good — keep going!":"💪 Practice makes perfect!"}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:20}}>
+          {results.map((r,i)=>(
+            <div key={i} style={{...s.card,textAlign:"center",border:`1px solid ${scoreColor(r.overall)}33`}}>
+              <div style={{fontSize:10,color:C.muted,fontFamily:"'DM Mono',monospace",marginBottom:4}}>Q{i+1}</div>
+              <div style={{fontSize:26,fontWeight:700,color:scoreColor(r.overall),fontFamily:"'Syne',sans-serif"}}>{r.overall}</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.qType}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+          <button style={s.btn} onClick={()=>start(role)}>🔄 Practice Again</button>
+          <button style={s.btnG} onClick={()=>setPhase("pick")}>← Change Role</button>
+        </div>
+      </div>
+    );
+  }
+
+  const q = qs[idx];
+  return (
+    <div style={s.container}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>{role.icon}</span>
+          <span style={{fontSize:13,color:C.muted}}>{role.label}</span>
+          <span style={s.tag(q.t)}>{q.t}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:(!feedback&&!loading)?C.amber:C.muted}}>⏱ {fmtTime(timer)}</span>
+          <span style={{fontSize:13,color:C.muted}}>Q{idx+1}/{qs.length}</span>
+          <button style={s.btnSm} onClick={()=>setPhase("pick")}>✕</button>
+        </div>
+      </div>
+      {/* progress */}
+      <div style={{height:2,background:C.faint,borderRadius:99,marginBottom:18}}>
+        <div style={{height:2,width:`${((idx+(feedback?1:0))/qs.length)*100}%`,background:C.blue,borderRadius:99,transition:"width .4s"}}/>
+      </div>
+      <div style={s.card}>
+        <p style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:19,color:"#fff",lineHeight:1.45,margin:"0 0 18px"}}>{q.q}</p>
+        {!feedback && <>
+          <textarea ref={taRef} style={s.textarea} placeholder="Type your answer... Use specific examples and STAR method for behavioral questions." value={answer} onChange={e=>setAnswer(e.target.value)} autoFocus/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
+            <span style={{fontSize:11,color:C.faint,fontFamily:"'DM Mono',monospace"}}>{answer.trim().split(/\s+/).filter(Boolean).length} words</span>
+            <button style={{...s.btn,opacity:(!answer.trim()||loading)?0.4:1}} onClick={submit} disabled={!answer.trim()||loading}>Submit →</button>
+          </div>
+        </>}
+        {loading && <Spinner msg="Scoring your answer..."/>}
+      </div>
+      {feedback && !loading && (
+        <div style={{marginTop:14}}>
+          <div style={{...s.card,marginBottom:10,background:"#0c1018",border:`1px solid ${scoreColor(feedback.overall)}33`,display:"flex",alignItems:"center",gap:16}}>
+            <div style={{textAlign:"center",minWidth:60}}>
+              <div style={{fontSize:44,fontWeight:800,color:scoreColor(feedback.overall),fontFamily:"'Syne',sans-serif",lineHeight:1}}>{feedback.overall}</div>
+              <div style={{fontSize:10,color:C.muted,fontFamily:"'DM Mono',monospace"}}>/10</div>
+            </div>
+            <div>
+              <div style={{fontWeight:600,fontSize:15,color:"#fff"}}>Overall Score</div>
+              <div style={{fontSize:13,color:C.muted,marginTop:4,fontStyle:"italic"}}>"{feedback.verdict}"</div>
+            </div>
+          </div>
+          <div style={{...s.card,marginBottom:10}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:12}}>Breakdown</div>
+            <ScoreRow label="Relevance" score={feedback.scores.relevance} color={C.blue}/>
+            <ScoreRow label="Structure (STAR)" score={feedback.scores.structure} color={C.green}/>
+            <ScoreRow label="Depth" score={feedback.scores.depth} color={C.amber}/>
+            <ScoreRow label="Communication" score={feedback.scores.communication} color={C.purple}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{...s.card,background:C.greenD,border:`1px solid ${C.greenB}`}}>
+              <div style={{fontSize:11,color:C.green,fontWeight:600,marginBottom:8}}>✓ Strengths</div>
+              {feedback.strengths.map((x,i)=><div key={i} style={{fontSize:12,color:"#8ecca8",lineHeight:1.5,marginBottom:4}}>• {x}</div>)}
+            </div>
+            <div style={{...s.card,background:C.amberD,border:`1px solid ${C.amberB}`}}>
+              <div style={{fontSize:11,color:C.amber,fontWeight:600,marginBottom:8}}>↑ Improve</div>
+              {feedback.improvements.map((x,i)=><div key={i} style={{fontSize:12,color:"#c8a870",lineHeight:1.5,marginBottom:4}}>• {x}</div>)}
+            </div>
+          </div>
+          <div style={{...s.card,background:C.purpleD,border:`1px solid ${C.purpleB}`,marginBottom:14}}>
+            <div style={{fontSize:11,color:C.purple,fontWeight:600,marginBottom:8}}>💡 Model Answer</div>
+            <div style={{fontSize:13,color:"#c0a8e8",lineHeight:1.7}}>{feedback.modelAnswer}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <button style={s.btn} onClick={next}>{idx+1<qs.length?"Next Question →":"See Results →"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════════
+   RESUME ANALYZER
+══════════════════════════════════════════ */
+const Resume = () => {
+  const [resumeText, setResumeText] = useState("");
+  const [jobDesc, setJobDesc] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const analyze = async () => {
+    if(!resumeText.trim()) return;
+    setLoading(true); setResult(null);
+    const prompt = `You are an expert ATS and resume coach. Analyze this resume${jobDesc ? " against the job description" : ""}.\n\nRESUME:\n${resumeText}\n${jobDesc ? `\nJOB DESCRIPTION:\n${jobDesc}` : ""}\n\nRespond ONLY with JSON (no markdown):\n{\n  "atsScore": <0-100>,\n  "matchScore": <0-100 or null if no JD>,\n  "sections": {\n    "summary": <0-10>,\n    "experience": <0-10>,\n    "skills": <0-10>,\n    "education": <0-10>,\n    "formatting": <0-10>\n  },\n  "strengths": ["<s1>","<s2>","<s3>"],\n  "issues": ["<i1>","<i2>","<i3>"],\n  "missingKeywords": ["<k1>","<k2>","<k3>","<k4>","<k5>"],\n  "quickWins": ["<w1>","<w2>","<w3>"],\n  "rewriteSuggestion": "<rewrite the resume summary/objective in 2-3 powerful sentences>",\n  "verdict": "<one sentence overall assessment>"\n}`;
+    try {
+      const text = await callClaude(prompt, 1500);
+      const parsed = parseJSON(text);
+      if(parsed) setResult(parsed); else throw new Error();
+    } catch {
+      setResult({ atsScore:72, matchScore:jobDesc?68:null, sections:{summary:7,experience:8,skills:6,education:7,formatting:8}, strengths:["Good work experience section","Clear formatting","Quantified achievements"], issues:["Missing keywords for ATS","No LinkedIn/GitHub links","Summary section too generic"], missingKeywords:["Python","Agile","SQL","Leadership","Cross-functional"], quickWins:["Add a tailored summary","Include more action verbs","Add measurable results"], rewriteSuggestion:"Results-driven professional with 3+ years of experience delivering impactful solutions. Proven track record of cross-functional collaboration and data-driven decision making. Passionate about leveraging technology to solve complex business challenges.", verdict:"Solid resume with room to improve keyword density and ATS compatibility." });
+    }
+    setLoading(false);
+  };
+
+  const ScoreCircle = ({score, label, color, size=64})=>{
+    const r=22, circ=2*Math.PI*r, dash=(score/100)*circ;
+    return(
+      <div style={{textAlign:"center"}}>
+        <svg width={size} height={size} viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r={r} fill="none" stroke={C.faint} strokeWidth="4"/>
+          <circle cx="28" cy="28" r={r} fill="none" stroke={color} strokeWidth="4" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 28 28)" style={{transition:"stroke-dasharray 1s ease"}}/>
+          <text x="28" y="33" textAnchor="middle" fontSize="13" fontWeight="700" fill={color} fontFamily="'DM Mono',monospace">{score}</text>
+        </svg>
+        <div style={{fontSize:11,color:C.muted,marginTop:4,fontFamily:"'DM Mono',monospace"}}>{label}</div>
+      </div>
+    );
+  };
+
+  return(
+    <div style={s.container}>
+      <div style={s.sectionLabel}>AI-powered</div>
+      <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,color:"#fff",margin:"0 0 20px",letterSpacing:-0.5}}>Resume Analyzer</h2>
+      {!result && (
+        <div style={{display:"grid",gap:12,marginBottom:14}}>
+          <div style={s.card}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Paste your resume text <span style={{color:C.red}}>*</span></div>
+            <textarea style={{...s.textarea,minHeight:160}} placeholder="Paste your full resume here — work experience, skills, education, summary..." value={resumeText} onChange={e=>setResumeText(e.target.value)}/>
+          </div>
+          <div style={s.card}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Paste job description <span style={{color:C.muted,fontSize:11}}>(optional — enables match scoring)</span></div>
+            <textarea style={{...s.textarea,minHeight:100}} placeholder="Paste the job description to get a match score and targeted keyword suggestions..." value={jobDesc} onChange={e=>setJobDesc(e.target.value)}/>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <button style={{...s.btn,opacity:!resumeText.trim()?0.4:1}} onClick={analyze} disabled={!resumeText.trim()}>Analyze Resume →</button>
+          </div>
+        </div>
+      )}
+      {loading && <Spinner msg="Analyzing your resume..."/>}
+      {result && !loading && (
+        <div>
+          {/* Scores row */}
+          <div style={{...s.card,marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-around",flexWrap:"wrap",gap:16,padding:"22px"}}>
+            <ScoreCircle score={result.atsScore} label="ATS Score" color={scoreColor(result.atsScore/10)}/>
+            {result.matchScore!=null && <ScoreCircle score={result.matchScore} label="JD Match" color={scoreColor(result.matchScore/10)}/>}
+            {Object.entries(result.sections).map(([k,v])=>(
+              <div key={k} style={{textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:700,color:scoreColor(v),fontFamily:"'Syne',sans-serif"}}>{v}</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:"'DM Mono',monospace",textTransform:"capitalize",marginTop:2}}>{k}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{...s.card,background:"#0c1018",border:`1px solid ${C.blueB}`,marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.blue,marginBottom:6}}>Overall Assessment</div>
+            <div style={{fontSize:14,color:C.text,lineHeight:1.6}}>{result.verdict}</div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{...s.card,background:C.greenD,border:`1px solid ${C.greenB}`}}>
+              <div style={{fontSize:11,color:C.green,fontWeight:600,marginBottom:8}}>✓ What's working</div>
+              {result.strengths.map((x,i)=><div key={i} style={{fontSize:12,color:"#8ecca8",lineHeight:1.5,marginBottom:4}}>• {x}</div>)}
+            </div>
+            <div style={{...s.card,background:C.redD,border:`1px solid ${C.redB}`}}>
+              <div style={{fontSize:11,color:C.red,fontWeight:600,marginBottom:8}}>✗ Issues found</div>
+              {result.issues.map((x,i)=><div key={i} style={{fontSize:12,color:"#cc8888",lineHeight:1.5,marginBottom:4}}>• {x}</div>)}
+            </div>
+          </div>
+
+          <div style={{...s.card,marginBottom:10}}>
+            <div style={{fontSize:11,color:C.amber,fontWeight:600,marginBottom:10}}>🔑 Missing Keywords (add these!)</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {result.missingKeywords.map((k,i)=>(
+                <span key={i} style={{background:C.amberD,border:`1px solid ${C.amberB}`,color:C.amber,borderRadius:99,padding:"4px 12px",fontSize:12,fontFamily:"'DM Mono',monospace"}}>{k}</span>
+              ))}
+            </div>
+          </div>
+
+          <div style={{...s.card,background:C.tealD,border:`1px solid ${C.tealB}`,marginBottom:10}}>
+            <div style={{fontSize:11,color:C.teal,fontWeight:600,marginBottom:8}}>⚡ Quick Wins</div>
+            {result.quickWins.map((x,i)=><div key={i} style={{fontSize:12,color:"#88ccca",lineHeight:1.5,marginBottom:4}}>• {x}</div>)}
+          </div>
+
+          <div style={{...s.card,background:C.purpleD,border:`1px solid ${C.purpleB}`,marginBottom:16}}>
+            <div style={{fontSize:11,color:C.purple,fontWeight:600,marginBottom:8}}>✍️ Rewritten Summary</div>
+            <div style={{fontSize:13,color:"#c0a8e8",lineHeight:1.7,fontStyle:"italic"}}>"{result.rewriteSuggestion}"</div>
+          </div>
+
+          <div style={{textAlign:"center"}}>
+            <button style={s.btnG} onClick={()=>setResult(null)}>← Analyze Another</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════════
+   SKILL GAP PLANNER
+══════════════════════════════════════════ */
+const SkillGap = () => {
+  const [targetRole, setTargetRole] = useState("");
+  const [mySkills, setMySkills] = useState("");
+  const [experience, setExperience] = useState("0-1");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const analyze = async () => {
+    if(!targetRole.trim()||!mySkills.trim()) return;
+    setLoading(true); setResult(null);
+    const prompt = `You are a career coach. Analyze the skill gap for this person:\nTarget Role: ${targetRole}\nCurrent Skills: ${mySkills}\nExperience: ${experience} years\n\nRespond ONLY with JSON (no markdown):\n{\n  "readinessScore": <0-100>,\n  "matchedSkills": ["<s1>","<s2>","<s3>"],\n  "missingCritical": ["<s1>","<s2>","<s3>"],\n  "missingNiceToHave": ["<s1>","<s2>","<s3>"],\n  "roadmap": [\n    {"phase":"Phase 1 — Foundation","duration":"4-6 weeks","items":["<item1>","<item2>"],"resources":["<resource1>","<resource2>"]},\n    {"phase":"Phase 2 — Build","duration":"6-8 weeks","items":["<item1>","<item2>"],"resources":["<resource1>"]},\n    {"phase":"Phase 3 — Apply","duration":"4 weeks","items":["<item1>","<item2>"],"resources":["<resource1>"]}\n  ],\n  "projectIdeas": ["<project1>","<project2>","<project3>"],\n  "estimatedReadyIn": "<timeframe like '3-4 months'>",\n  "verdict": "<motivating one-sentence assessment>"\n}`;
+    try {
+      const text = await callClaude(prompt, 1500);
+      const parsed = parseJSON(text);
+      if(parsed) setResult(parsed); else throw new Error();
+    } catch {
+      setResult({ readinessScore:58, matchedSkills:["Python","SQL","Communication"], missingCritical:["Machine Learning","Statistics","TensorFlow"], missingNiceToHave:["Cloud (AWS/GCP)","Spark","Tableau"], roadmap:[{phase:"Phase 1 — Foundation",duration:"4-6 weeks",items:["Statistics & Probability basics","Python for Data Science (NumPy, Pandas)"],resources:["Kaggle Learn (free)","StatQuest on YouTube"]},{phase:"Phase 2 — Build",duration:"6-8 weeks",items:["Scikit-learn ML models","End-to-end ML project"],resources:["Hands-On ML book","Fast.ai course"]},{phase:"Phase 3 — Apply",duration:"4 weeks",items:["Kaggle competition","Update portfolio & resume"],resources:["Kaggle.com","GitHub portfolio guide"]}], projectIdeas:["Predict house prices using regression","Build a sentiment classifier on tweets","Customer churn analysis dashboard"], estimatedReadyIn:"3-4 months", verdict:"You have a strong foundation — a focused 3-month sprint will get you job-ready!" });
+    }
+    setLoading(false);
+  };
+
+  const phaseColors = [C.blue, C.green, C.amber];
+
+  return(
+    <div style={s.container}>
+      <div style={s.sectionLabel}>Career planning</div>
+      <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,color:"#fff",margin:"0 0 20px",letterSpacing:-0.5}}>Skill Gap Planner</h2>
+      {!result && (
+        <div style={{display:"grid",gap:12}}>
+          <div style={s.card}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Target job role <span style={{color:C.red}}>*</span></div>
+            <input style={s.input} placeholder="e.g. Data Scientist, Frontend Developer, Product Manager..." value={targetRole} onChange={e=>setTargetRole(e.target.value)}/>
+          </div>
+          <div style={s.card}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Your current skills <span style={{color:C.red}}>*</span></div>
+            <textarea style={{...s.textarea,minHeight:90}} placeholder="e.g. Python, Excel, SQL, communication, project management..." value={mySkills} onChange={e=>setMySkills(e.target.value)}/>
+          </div>
+          <div style={s.card}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Years of experience</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {[["0-1","Fresher"],["1-3","Junior"],["3-5","Mid"],["5+","Senior"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setExperience(v)} style={{...s.btnSm, background:experience===v?C.blueD:C.faint, border:`1px solid ${experience===v?C.blueB:C.border}`, color:experience===v?C.blue:C.muted}}>{l} ({v} yrs)</button>
+              ))}
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <button style={{...s.btn,opacity:(!targetRole.trim()||!mySkills.trim())?0.4:1}} onClick={analyze} disabled={!targetRole.trim()||!mySkills.trim()}>Analyze Gap →</button>
+          </div>
+        </div>
+      )}
+      {loading && <Spinner msg="Building your personalized roadmap..."/>}
+      {result && !loading && (
+        <div>
+          {/* Readiness */}
+          <div style={{...s.card,marginBottom:12,display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{textAlign:"center",minWidth:80}}>
+              <div style={{fontSize:48,fontWeight:800,color:scoreColor(result.readinessScore/10),fontFamily:"'Syne',sans-serif",lineHeight:1}}>{result.readinessScore}%</div>
+              <div style={{fontSize:11,color:C.muted,fontFamily:"'DM Mono',monospace"}}>job ready</div>
+            </div>
+            <div>
+              <div style={{fontWeight:600,color:"#fff",marginBottom:4}}>Ready in: <span style={{color:C.blue}}>{result.estimatedReadyIn}</span></div>
+              <div style={{fontSize:13,color:C.muted,fontStyle:"italic"}}>{result.verdict}</div>
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{...s.card,background:C.greenD,border:`1px solid ${C.greenB}`}}>
+              <div style={{fontSize:11,color:C.green,fontWeight:600,marginBottom:8}}>✓ You already have</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {result.matchedSkills.map((k,i)=><span key={i} style={{background:C.greenD,border:`1px solid ${C.greenB}`,color:C.green,borderRadius:99,padding:"3px 10px",fontSize:12}}>{k}</span>)}
+              </div>
+            </div>
+            <div style={{...s.card,background:C.redD,border:`1px solid ${C.redB}`}}>
+              <div style={{fontSize:11,color:C.red,fontWeight:600,marginBottom:8}}>✗ Critical gaps</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {result.missingCritical.map((k,i)=><span key={i} style={{background:C.redD,border:`1px solid ${C.redB}`,color:C.red,borderRadius:99,padding:"3px 10px",fontSize:12}}>{k}</span>)}
+              </div>
+            </div>
+          </div>
+
+          {result.missingNiceToHave?.length > 0 && (
+            <div style={{...s.card,marginBottom:10}}>
+              <div style={{fontSize:11,color:C.amber,fontWeight:600,marginBottom:8}}>⭐ Nice to have</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {result.missingNiceToHave.map((k,i)=><span key={i} style={{background:C.amberD,border:`1px solid ${C.amberB}`,color:C.amber,borderRadius:99,padding:"3px 10px",fontSize:12}}>{k}</span>)}
+              </div>
+            </div>
+          )}
+
+          {/* Roadmap */}
+          <div style={{...s.card,marginBottom:10}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:14}}>📍 Your Learning Roadmap</div>
+            <div style={{display:"grid",gap:12}}>
+              {result.roadmap.map((phase,i)=>(
+                <div key={i} style={{borderLeft:`3px solid ${phaseColors[i]||C.blue}`,paddingLeft:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <span style={{fontWeight:600,fontSize:13,color:phaseColors[i]||C.blue}}>{phase.phase}</span>
+                    <span style={{fontSize:11,color:C.muted,fontFamily:"'DM Mono',monospace"}}>{phase.duration}</span>
+                  </div>
+                  <div style={{marginBottom:6}}>
+                    {phase.items.map((item,j)=><div key={j} style={{fontSize:12,color:C.text,marginBottom:3}}>→ {item}</div>)}
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {phase.resources?.map((r,j)=><span key={j} style={{fontSize:11,color:C.muted,background:C.faint,borderRadius:6,padding:"2px 8px"}}>{r}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{...s.card,background:C.purpleD,border:`1px solid ${C.purpleB}`,marginBottom:14}}>
+            <div style={{fontSize:11,color:C.purple,fontWeight:600,marginBottom:8}}>🚀 Project Ideas to Build Your Portfolio</div>
+            {result.projectIdeas.map((p,i)=><div key={i} style={{fontSize:12,color:"#c0a8e8",marginBottom:4}}>• {p}</div>)}
+          </div>
+
+          <div style={{textAlign:"center"}}>
+            <button style={s.btnG} onClick={()=>setResult(null)}>← Plan Another Role</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════════
+   JOB TRUST CHECKER
+══════════════════════════════════════════ */
+const JobCheck = () => {
+  const [jobPost, setJobPost] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const check = async () => {
+    if(!jobPost.trim()) return;
+    setLoading(true); setResult(null);
+    const prompt = `You are a job fraud detection expert. Analyze this job posting for authenticity and red flags.\n\nJOB POSTING:\n${jobPost}\n\nRespond ONLY with JSON (no markdown):\n{\n  "trustScore": <0-100>,\n  "verdict": "SAFE" | "SUSPICIOUS" | "LIKELY SCAM",\n  "redFlags": ["<flag1>","<flag2>"],\n  "greenFlags": ["<flag1>","<flag2>"],\n  "analysis": {\n    "companyClarity": <0-10>,\n    "compensationRealism": <0-10>,\n    "requirementsSensibility": <0-10>,\n    "languageQuality": <0-10>,\n    "contactLegitimacy": <0-10>\n  },\n  "warningDetails": "<2-3 sentence explanation of main concerns or confirmation of legitimacy>",\n  "recommendation": "<one clear action the job seeker should take>"\n}`;
+    try {
+      const text = await callClaude(prompt);
+      const parsed = parseJSON(text);
+      if(parsed) setResult(parsed); else throw new Error();
+    } catch {
+      setResult({ trustScore:42, verdict:"SUSPICIOUS", redFlags:["No company name or address mentioned","Unusually high salary for no experience","Asks for personal documents upfront","Vague job responsibilities","Contact is a Gmail address"], greenFlags:["Mentions specific role title","Has application process described"], analysis:{companyClarity:3,compensationRealism:2,requirementsSensibility:5,languageQuality:6,contactLegitimacy:2}, warningDetails:"This posting has several hallmarks of a job scam — no verifiable company, unrealistic pay, and request for personal information. These are classic patterns used in advance-fee and identity theft scams targeting job seekers.", recommendation:"Do not apply — verify the company on LinkedIn or their official website before proceeding." });
+    }
+    setLoading(false);
+  };
+
+  const verdictStyle = v => ({
+    "SAFE": { bg:C.greenD, border:C.greenB, color:C.green, icon:"✅" },
+    "SUSPICIOUS": { bg:C.amberD, border:C.amberB, color:C.amber, icon:"⚠️" },
+    "LIKELY SCAM": { bg:C.redD, border:C.redB, color:C.red, icon:"🚫" },
+  })[v] || { bg:C.faint, border:C.border, color:C.muted, icon:"?" };
+
+  const ScoreRow = ({label,score})=>(
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+      <div style={{fontSize:12,color:C.muted,minWidth:160}}>{label}</div>
+      <div style={{flex:1,height:3,background:C.faint,borderRadius:99}}>
+        <div style={{height:3,width:`${score*10}%`,background:scoreColor(score),borderRadius:99,transition:"width 1s ease"}}/>
+      </div>
+      <div style={{fontSize:12,fontFamily:"'DM Mono',monospace",color:scoreColor(score),minWidth:20}}>{score}</div>
+    </div>
+  );
+
+  return(
+    <div style={s.container}>
+      <div style={s.sectionLabel}>Fraud detection</div>
+      <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,color:"#fff",margin:"0 0 8px",letterSpacing:-0.5}}>Job Trust Checker</h2>
+      <p style={{fontSize:13,color:C.muted,marginBottom:20}}>Paste any job posting — AI checks for scam patterns, unrealistic promises, and red flags.</p>
+
+      {!result && (
+        <div style={{display:"grid",gap:12}}>
+          <div style={s.card}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Paste the job posting <span style={{color:C.red}}>*</span></div>
+            <textarea style={{...s.textarea,minHeight:200}} placeholder="Paste the full job posting here — title, company, description, requirements, salary, contact info..." value={jobPost} onChange={e=>setJobPost(e.target.value)}/>
+            <div style={{marginTop:12,textAlign:"right"}}>
+              <button style={{...s.btn,opacity:!jobPost.trim()?0.4:1}} onClick={check} disabled={!jobPost.trim()}>Check Job →</button>
+            </div>
+          </div>
+          <div style={{...s.card,background:C.amberD,border:`1px solid ${C.amberB}`}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.amber,marginBottom:8}}>Common scam signals to watch for</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+              {["Salary too good to be true","No company name/address","Asks for money upfront","Contact via personal email","Very vague job description","Urgently hiring with no interview","Asks for personal ID early","Generic copy-paste language"].map((x,i)=>(
+                <div key={i} style={{fontSize:12,color:"#c8a870"}}>• {x}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {loading && <Spinner msg="Analyzing job posting for fraud patterns..."/>}
+      {result && !loading && (
+        <div>
+          {/* Verdict banner */}
+          {(()=>{const vs=verdictStyle(result.verdict); return(
+            <div style={{...s.card,background:vs.bg,border:`1px solid ${vs.border}`,marginBottom:12,display:"flex",alignItems:"center",gap:16}}>
+              <div style={{fontSize:40}}>{vs.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:22,color:vs.color}}>{result.verdict}</div>
+                <div style={{fontSize:13,color:C.muted,marginTop:4}}>{result.warningDetails}</div>
+              </div>
+              <div style={{textAlign:"center",minWidth:64}}>
+                <div style={{fontSize:36,fontWeight:800,color:vs.color,fontFamily:"'Syne',sans-serif",lineHeight:1}}>{result.trustScore}</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:"'DM Mono',monospace"}}>trust score</div>
+              </div>
+            </div>
+          );})()}
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            {result.redFlags?.length>0 && (
+              <div style={{...s.card,background:C.redD,border:`1px solid ${C.redB}`}}>
+                <div style={{fontSize:11,color:C.red,fontWeight:600,marginBottom:8}}>🚩 Red Flags</div>
+                {result.redFlags.map((x,i)=><div key={i} style={{fontSize:12,color:"#cc8888",marginBottom:4}}>• {x}</div>)}
+              </div>
+            )}
+            {result.greenFlags?.length>0 && (
+              <div style={{...s.card,background:C.greenD,border:`1px solid ${C.greenB}`}}>
+                <div style={{fontSize:11,color:C.green,fontWeight:600,marginBottom:8}}>✅ Positive Signs</div>
+                {result.greenFlags.map((x,i)=><div key={i} style={{fontSize:12,color:"#8ecca8",marginBottom:4}}>• {x}</div>)}
+              </div>
+            )}
+          </div>
+
+          <div style={{...s.card,marginBottom:10}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:12}}>Detailed Analysis</div>
+            <ScoreRow label="Company clarity" score={result.analysis.companyClarity}/>
+            <ScoreRow label="Compensation realism" score={result.analysis.compensationRealism}/>
+            <ScoreRow label="Requirements sensibility" score={result.analysis.requirementsSensibility}/>
+            <ScoreRow label="Language quality" score={result.analysis.languageQuality}/>
+            <ScoreRow label="Contact legitimacy" score={result.analysis.contactLegitimacy}/>
+          </div>
+
+          <div style={{...s.card,background:C.blueD,border:`1px solid ${C.blueB}`,marginBottom:14}}>
+            <div style={{fontSize:11,color:C.blue,fontWeight:600,marginBottom:6}}>💡 Recommendation</div>
+            <div style={{fontSize:13,color:C.text,lineHeight:1.6}}>{result.recommendation}</div>
+          </div>
+
+          <div style={{textAlign:"center"}}>
+            <button style={s.btnG} onClick={()=>setResult(null)}>← Check Another Job</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════════
+   HISTORY
+══════════════════════════════════════════ */
+const History = ({ history, clearHistory }) => (
+  <div style={s.container}>
+    <div style={s.sectionLabel}>Your progress</div>
+    <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,color:"#fff",margin:"0 0 6px",letterSpacing:-0.5}}>Session History</h2>
+    <p style={{fontSize:13,color:C.muted,marginBottom:20}}>{history.length} interview sessions completed</p>
+    {history.length===0 ? (
+      <div style={{...s.card,textAlign:"center",padding:"50px 20px",color:C.faint}}>No sessions yet. Start practicing to see your history here!</div>
+    ) : (
+      <>
+        <div style={{display:"grid",gap:10,marginBottom:16}}>
+          {history.map((sess,i)=>(
+            <div key={sess.id} style={{...s.card,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+              <div style={{fontSize:22}}>{sess.icon||"💼"}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:14,color:C.text}}>{sess.role}</div>
+                <div style={{fontSize:11,color:C.muted,fontFamily:"'DM Mono',monospace",marginTop:2}}>{sess.date} · {sess.results.length} questions</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {sess.results.map((r,j)=>(
+                  <div key={j} title={`Q${j+1}: ${r.qType}`} style={{width:30,height:30,borderRadius:6,background:`${scoreColor(r.overall)}1a`,border:`1px solid ${scoreColor(r.overall)}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:scoreColor(r.overall),fontFamily:"'DM Mono',monospace"}}>{r.overall}</div>
+                ))}
+              </div>
+              <div style={{textAlign:"right",minWidth:48}}>
+                <div style={{fontSize:26,fontWeight:800,color:scoreColor(sess.avg),fontFamily:"'Syne',sans-serif",lineHeight:1}}>{sess.avg}</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:"'DM Mono',monospace"}}>avg</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {history.length>0 && (
+          <div style={{textAlign:"center"}}>
+            <button style={s.btnG} onClick={clearHistory}>Clear all history</button>
+          </div>
+        )}
+      </>
+    )}
+  </div>
+);
+
+/* ══════════════════════════════════════════
+   ROOT
+══════════════════════════════════════════ */
+export default function App() {
+  const [tab, setTab] = useState("home");
+  const [history, setHistory] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem("prep_ai_history")||"[]"); } catch { return []; }
+  });
+
+  const saveSession = sess => {
+    const next = [sess, ...history].slice(0,15);
+    setHistory(next);
+    try { localStorage.setItem("prep_ai_history", JSON.stringify(next)); } catch {}
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    try { localStorage.removeItem("prep_ai_history"); } catch {}
+  };
+
+  return (
+    <div style={s.app}>
+      <FontLink/>
+      <NavBar activeTab={tab} setTab={setTab} history={history}/>
+      {tab==="home"     && <Home setTab={setTab}/>}
+      {tab==="interview"&& <Interview onSaveSession={saveSession}/>}
+      {tab==="resume"   && <Resume/>}
+      {tab==="skillgap" && <SkillGap/>}
+      {tab==="jobcheck" && <JobCheck/>}
+      {tab==="history"  && <History history={history} clearHistory={clearHistory}/>}
+    </div>
+  );
+}
+

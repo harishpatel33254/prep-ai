@@ -86,7 +86,7 @@ link to acces the working site --- https://harishpatel33254.github.io/prep-ai/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/prep-ai.git
+git clone https://github.com/harishpatel33254/prep-ai.git
 cd prep-ai
 
 # 2. Install dependencies
